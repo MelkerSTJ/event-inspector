@@ -1,24 +1,43 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { mockProjects } from "app/lib/projects/mock";
+import { Modal } from "app/components/common/modal";
+import { mockProjects, type Project } from "app/lib/projects/mock";
+import { CreateProjectForm } from "app/components/projects/create-project-form";
+
 
 export default function ProjectsPage() {
+  const [open, setOpen] = useState(false);
+
+  // I v1 lägger vi till nya projekt bara i minnet (state)
+  const [localProjects, setLocalProjects] = useState<Project[]>([]);
+
+  const projects = useMemo(
+    () => [...mockProjects, ...localProjects],
+    [localProjects]
+  );
+
   return (
     <div className="p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">Projects</h2>
-          <p className="mt-2 text-muted-foreground">
-            Sites you track. Each project can have multiple environments (prod, staging).
+          <p className="mt-2 text-sm text-gray-600">
+            Sites you track. Each project can have multiple environments.
           </p>
         </div>
 
-        <button className="rounded-md bg-black px-4 py-2 text-sm text-white">
+        <button
+          onClick={() => setOpen(true)}
+          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white"
+        >
           New project
         </button>
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {mockProjects.map((p) => (
+        {projects.map((p) => (
           <Link
             key={p.id}
             href={`/projects/${p.id}`}
@@ -53,6 +72,18 @@ export default function ProjectsPage() {
           </Link>
         ))}
       </div>
+
+      <Modal open={open} title="Create project" onClose={() => setOpen(false)}>
+  <CreateProjectForm
+    existingIds={projects.map((p) => p.id)}
+    onCancel={() => setOpen(false)}
+    onCreate={(project) => {
+      setLocalProjects((prev) => [project, ...prev]);
+      setOpen(false);
+    }}
+  />
+</Modal>
+
     </div>
   );
 }
