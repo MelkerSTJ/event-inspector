@@ -43,14 +43,16 @@ export default async function ProjectLivePage({
       </div>
 
       <div className="mt-6">
-        <LiveFeed
-          projectId={project.id}
-          environments={project.environments.map((e) => ({
-            id: e.id,
-            name: e.name,
-            status: e.status
-          }))}
-        />
+      <LiveFeed
+  projectId={project.id}
+  environments={project.environments.map((e) => ({
+    id: e.id,
+    name: e.name,
+    status: e.status,
+    writeKey: e.writeKey
+  }))}
+/>
+
       </div>
     </div>
   );
