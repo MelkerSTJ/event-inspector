@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getProjectById } from "app/lib/projects/mock";
-import { InstallSnippet } from "app/components/projects/install-snippet";
+import { ProjectInstallPanel } from "app/components/projects/project-install-panel";
+
 
 export default async function ProjectPage({
   params
@@ -23,8 +24,6 @@ export default async function ProjectPage({
       </div>
     );
   }
-
-  const defaultEnv = project.environments[0];
 
   return (
     <div className="p-6">
@@ -87,7 +86,10 @@ export default async function ProjectPage({
           </div>
         </div>
 
-        <InstallSnippet writeKey={defaultEnv.writeKey} />
+        <div className="mt-6">
+  <ProjectInstallPanel project={project} />
+</div>
+
       </div>
     </div>
   );
