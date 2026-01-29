@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getProjectById } from "app/lib/projects/mock";
+import { LiveFeed } from "app/components/live/live-feed";
 
 export default async function ProjectLivePage({
   params
@@ -6,26 +8,49 @@ export default async function ProjectLivePage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
+  const project = getProjectById(projectId);
+
+  if (!project) {
+    return (
+      <div className="p-6">
+        <h2 className="text-2xl font-semibold">Project not found</h2>
+        <p className="mt-2 text-gray-600">
+          We couldn’t find a project with id: <span className="font-mono">{projectId}</span>
+        </p>
+        <Link href="/projects" className="mt-6 inline-block underline">
+          Back to projects
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">Live</h2>
-          <p className="mt-2 text-muted-foreground">
-            Project: <span className="font-mono">{projectId}</span>
+          <p className="mt-2 text-sm text-gray-600">
+            Project: <span className="font-mono">{project.id}</span> • {project.domain}
           </p>
         </div>
 
-        <Link href={`/projects/${projectId}`} className="underline">
-          Back
+        <Link
+          href={`/projects/${project.id}`}
+          className="rounded-lg border px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+        >
+          Back to project
         </Link>
       </div>
 
-      <div className="mt-6 rounded-xl border bg-white p-5">
-        <p className="text-sm text-muted-foreground">
-          Next step: stream incoming events here (SSE). For now this is a placeholder.
-        </p>
+      <div className="mt-6">
+        <LiveFeed
+          projectId={project.id}
+          environments={project.environments.map((e) => ({
+            id: e.id,
+            name: e.name,
+            status: e.status
+          }))}
+        />
       </div>
     </div>
   );
