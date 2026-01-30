@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Project } from "app/lib/projects/mock"
+import type { Project } from "app/lib/projects/mock";
 
 function slugify(input: string) {
   return input
@@ -15,15 +15,15 @@ function slugify(input: string) {
 }
 
 function normalizeDomain(input: string) {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/https?:\/\//g, "")
-    .replace(/\/.*$/g, "");
+  return input.trim().toLowerCase().replace(/https?:\/\//g, "").replace(/\/.*$/g, "");
 }
 
 function looksLikeDomain(domain: string) {
   return domain.includes(".") && !domain.includes(" ");
+}
+
+function makeWriteKey(projectId: string, envId: string) {
+  return `wk_${projectId}_${envId}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function Field({
@@ -93,9 +93,22 @@ export function CreateProjectForm({
     if (!canSubmit) return;
 
     const envs: Project["environments"] = [
-      { id: "prod", name: "Production", status: "live" }
+      {
+        id: "prod",
+        name: "Production",
+        status: "live",
+        writeKey: makeWriteKey(computedId, "prod")
+      }
     ];
-    if (includeStaging) envs.push({ id: "stage", name: "Staging", status: "paused" });
+
+    if (includeStaging) {
+      envs.push({
+        id: "stage",
+        name: "Staging",
+        status: "paused",
+        writeKey: makeWriteKey(computedId, "stage")
+      });
+    }
 
     const project: Project = {
       id: computedId,
@@ -123,11 +136,7 @@ export function CreateProjectForm({
         />
       </Field>
 
-      <Field
-        label="Domain"
-        hint="No https://"
-        error={touched.domain ? errors.domain : undefined}
-      >
+      <Field label="Domain" hint="No https://" error={touched.domain ? errors.domain : undefined}>
         <input
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
@@ -148,9 +157,7 @@ export function CreateProjectForm({
         <label htmlFor="staging" className="text-sm font-medium text-gray-900">
           Include Staging environment
         </label>
-        <span className="ml-auto text-xs text-gray-600">
-          (recommended)
-        </span>
+        <span className="ml-auto text-xs text-gray-600">(recommended)</span>
       </div>
 
       <div className="rounded-xl border bg-white p-4">
