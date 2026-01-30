@@ -34,6 +34,13 @@ function badgeClasses(status: LiveEvent["status"]) {
   return "border-red-200 bg-red-50 text-red-800";
 }
 
+function getStringParam(params: Record<string, unknown>, key: string): string | undefined {
+  const v = params[key];
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return String(v);
+  return undefined;
+}
+
 function buildSamplePayload(projectId: string, envId: string): Omit<IngestPayload, "writeKey"> {
   const urlPool = ["/", "/category/wintersale", "/product/jacket-123", "/cart", "/checkout"] as const;
   const names = ["page_view", "view_item", "add_to_cart", "begin_checkout", "purchase"] as const;
@@ -45,19 +52,15 @@ function buildSamplePayload(projectId: string, envId: string): Omit<IngestPayloa
     projectId,
     envId,
     item_id: name === "view_item" || name === "add_to_cart" ? "sku_259686" : undefined,
-    value: name === "purchase" ? 1299 : name === "add_to_cart" ? 649 : undefined
+    value: name === "purchase" ? 1299 : name === "add_to_cart" ? 649 : undefined,
+    currency: "SEK"
   };
 
-  // medvetet “ibland fel” så du ser warn/error
   if (name === "add_to_cart") {
     if (Math.random() < 0.4) params.currency = undefined; // warn
-    else params.currency = "SEK";
   } else if (name === "purchase") {
-    params.currency = "SEK";
     if (Math.random() < 0.3) params.transaction_id = undefined; // error
     else params.transaction_id = "t_" + Date.now();
-  } else {
-    params.currency = "SEK";
   }
 
   return {
@@ -87,6 +90,7 @@ export function LiveFeed({
 
   const [nameFilter, setNameFilter] = useState("");
   const [urlFilter, setUrlFilter] = useState("");
+  const [sessionFilter, setSessionFilter] = useState("");
 
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
@@ -96,46 +100,52 @@ export function LiveFeed({
     [environments, envId]
   );
 
-  // SSE: koppla upp vid envId
   useEffect(() => {
-  // stäng tidigare stream om den finns
-  esRef.current?.close();
+    esRef.current?.close();
 
-  const es = new EventSource(`/api/stream?projectId=${projectId}&envId=${envId}`);
-  esRef.current = es;
+    const es = new EventSource(`/api/stream?projectId=${projectId}&envId=${envId}`);
+    esRef.current = es;
 
-  es.onopen = () => setConnected(true);
+    es.onopen = () => setConnected(true);
 
-  es.onmessage = (msg) => {
-    try {
-      const data = JSON.parse(msg.data);
-      if (data?.type === "event" && data?.evt) {
-        const evt = data.evt as LiveEvent;
-        setEvents((prev) => [evt, ...prev].slice(0, 200));
+    es.onmessage = (msg) => {
+      try {
+        const data = JSON.parse(msg.data) as { type?: string; evt?: LiveEvent };
+        if (data?.type === "event" && data?.evt) {
+          setEvents((prev) => [data.evt!, ...prev].slice(0, 200));
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  };
+    };
 
-  es.onerror = () => setConnected(false);
+    es.onerror = () => setConnected(false);
 
-  return () => {
-    es.close();
-  };
-}, [projectId, envId]);
-
+    return () => {
+      es.close();
+    };
+  }, [projectId, envId]);
 
   const filtered = useMemo(() => {
     const nf = nameFilter.trim().toLowerCase();
     const uf = urlFilter.trim().toLowerCase();
+    const sf = sessionFilter.trim().toLowerCase();
 
     return events.filter((e) => {
       const okName = !nf || e.name.toLowerCase().includes(nf);
       const okUrl = !uf || e.url.toLowerCase().includes(uf);
-      return okName && okUrl;
+
+      // We support both "ei_session" (new) and "sessionId" (if you used older naming)
+      const sid =
+        getStringParam(e.params, "ei_session") ??
+        getStringParam(e.params, "sessionId") ??
+        "";
+
+      const okSession = !sf || sid.toLowerCase().includes(sf);
+
+      return okName && okUrl && okSession;
     });
-  }, [events, nameFilter, urlFilter]);
+  }, [events, nameFilter, urlFilter, sessionFilter]);
 
   async function sendTestEvent() {
     const base = buildSamplePayload(projectId, envId);
@@ -158,7 +168,6 @@ export function LiveFeed({
   }
 
   function changeEnv(nextEnvId: string) {
-    // reset sker här istället för i useEffect (eslint blir glad)
     setEvents([]);
     setSelected(null);
     setEnvId(nextEnvId);
@@ -187,9 +196,7 @@ export function LiveFeed({
                     ].join(" ")}
                   >
                     {e.name}
-                    <span className="ml-2 text-xs font-semibold text-gray-500">
-                      {e.status}
-                    </span>
+                    <span className="ml-2 text-xs font-semibold text-gray-500">{e.status}</span>
                   </button>
                 );
               })}
@@ -198,12 +205,7 @@ export function LiveFeed({
 
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full border bg-gray-50 px-3 py-1 text-sm font-semibold text-gray-800">
-              <span
-                className={[
-                  "h-2 w-2 rounded-full",
-                  connected ? "bg-green-500" : "bg-gray-400"
-                ].join(" ")}
-              />
+              <span className={["h-2 w-2 rounded-full", connected ? "bg-green-500" : "bg-gray-400"].join(" ")} />
               {connected ? "Connected" : "Connecting…"}
             </span>
 
@@ -223,7 +225,7 @@ export function LiveFeed({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
           <div>
             <div className="text-xs font-semibold text-gray-700">Filter by event name</div>
             <input
@@ -233,6 +235,7 @@ export function LiveFeed({
               placeholder="e.g. add_to_cart"
             />
           </div>
+
           <div>
             <div className="text-xs font-semibold text-gray-700">Filter by URL contains</div>
             <input
@@ -240,6 +243,16 @@ export function LiveFeed({
               onChange={(e) => setUrlFilter(e.target.value)}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-black focus:ring-2 focus:ring-black/10"
               placeholder="e.g. /checkout"
+            />
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-gray-700">Filter by session id</div>
+            <input
+              value={sessionFilter}
+              onChange={(e) => setSessionFilter(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-black focus:ring-2 focus:ring-black/10"
+              placeholder="e.g. TEST123"
             />
           </div>
         </div>
@@ -272,26 +285,16 @@ export function LiveFeed({
                     key={e.id}
                     type="button"
                     onClick={() => setSelected(e)}
-                    className={[
-                      "w-full text-left p-4 transition",
-                      active ? "bg-gray-50" : "hover:bg-gray-50"
-                    ].join(" ")}
+                    className={["w-full text-left p-4 transition", active ? "bg-gray-50" : "hover:bg-gray-50"].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-gray-900">{e.name}</span>
-                          <span
-                            className={[
-                              "rounded-md border px-2 py-0.5 text-xs font-semibold",
-                              badgeClasses(e.status)
-                            ].join(" ")}
-                          >
+                          <span className={["rounded-md border px-2 py-0.5 text-xs font-semibold", badgeClasses(e.status)].join(" ")}>
                             {e.status.toUpperCase()}
                           </span>
-                          {e.message ? (
-                            <span className="text-xs font-semibold text-gray-600">{e.message}</span>
-                          ) : null}
+                          {e.message ? <span className="text-xs font-semibold text-gray-600">{e.message}</span> : null}
                         </div>
                         <div className="mt-1 text-xs text-gray-600">{e.url}</div>
                       </div>
