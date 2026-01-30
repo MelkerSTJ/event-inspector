@@ -2,18 +2,26 @@
 
 import { useMemo, useState } from "react";
 
-export function InstallSnippet({ writeKey }: { writeKey: string }) {
+export function InstallSnippet({
+  writeKey,
+  endpoint
+}: {
+  writeKey: string;
+  endpoint: string;
+}) {
   const snippet = useMemo(() => {
-    const APP_URL =
-      process.env.NEXT_PUBLIC_EI_APP_URL?.replace(/\/$/, "") ||
-      "http://localhost:3000";
+    // IMPORTANT:
+    // - write key + endpoint set as globals
+    // - then we load your hosted script /ei.js
+    const safeWriteKey = writeKey.replace(/"/g, '\\"');
+    const safeEndpoint = endpoint.replace(/"/g, '\\"');
 
     return `<script>
-window.__EI_WRITE_KEY__ = "${writeKey}";
-window.__EI_ENDPOINT__ = "${APP_URL}/api/ingest";
+window.__EI_WRITE_KEY__ = "${safeWriteKey}";
+window.__EI_ENDPOINT__ = "${safeEndpoint}";
 </script>
-<script async src="${APP_URL}/ei.js"></script>`;
-  }, [writeKey]);
+<script async src="${new URL("/ei.js", endpoint).toString().replace("/api/ingest/ei.js", "/ei.js").replace("/api/ingest", "/ei.js")}"></script>`;
+  }, [writeKey, endpoint]);
 
   const [copied, setCopied] = useState(false);
 
@@ -29,7 +37,7 @@ window.__EI_ENDPOINT__ = "${APP_URL}/api/ingest";
         <div>
           <h3 className="font-semibold text-gray-900">Install</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Paste this into GTM (Custom HTML tag) or your site header.
+            Paste this into GTM (Custom HTML tag) or your CMS header.
           </p>
         </div>
 

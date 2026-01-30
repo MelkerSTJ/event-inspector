@@ -9,11 +9,12 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
   const [selectedEnvId, setSelectedEnvId] = useState(defaultEnvId);
 
   const selectedEnv = useMemo(() => {
-    return (
-      project.environments.find((e) => e.id === selectedEnvId) ??
-      project.environments[0]
-    );
+    return project.environments.find((e) => e.id === selectedEnvId) ?? project.environments[0];
   }, [project.environments, selectedEnvId]);
+
+  // IMPORTANT: EI script runs on customer site.
+  // It must POST to YOUR app ingest endpoint.
+  const ingestEndpoint = `${process.env.NEXT_PUBLIC_EI_APP_URL ?? ""}/api/ingest`;
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -39,15 +40,9 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {env.name}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      Status: {env.status}
-                    </div>
-                    <div className="mt-2 font-mono text-xs text-gray-800">
-                      {env.writeKey}
-                    </div>
+                    <div className="text-sm font-semibold text-gray-900">{env.name}</div>
+                    <div className="text-xs text-gray-600">Status: {env.status}</div>
+                    <div className="mt-2 font-mono text-xs text-gray-800">{env.writeKey}</div>
                   </div>
 
                   <span
@@ -63,9 +58,7 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
                 </div>
 
                 {isSelected ? (
-                  <div className="mt-3 text-xs font-semibold text-gray-900">
-                    Selected
-                  </div>
+                  <div className="mt-3 text-xs font-semibold text-gray-900">Selected</div>
                 ) : null}
               </button>
             );
@@ -73,7 +66,7 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
         </div>
       </div>
 
-      <InstallSnippet writeKey={selectedEnv.writeKey} />
+      <InstallSnippet writeKey={selectedEnv.writeKey} endpoint={ingestEndpoint} />
     </div>
   );
 }
