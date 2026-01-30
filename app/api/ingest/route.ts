@@ -1,6 +1,22 @@
 import { publish, type StreamEvent } from "app/lib/live/bus";
 import { mockProjects } from "app/lib/projects/mock";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...corsHeaders
+    }
+  });
+}
+
 function randomId() {
   return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
 }
@@ -16,6 +32,10 @@ function findEnvByWriteKey(writeKey: string) {
   return null;
 }
 
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -26,15 +46,12 @@ export async function POST(req: Request) {
     const params = (body?.params ?? {}) as Record<string, unknown>;
 
     if (!writeKey || !name || !url) {
-      return Response.json(
-        { ok: false, error: "Missing writeKey, name or url" },
-        { status: 400 }
-      );
+      return json({ ok: false, error: "Missing writeKey, name or url" }, 400);
     }
 
     const found = findEnvByWriteKey(writeKey);
     if (!found) {
-      return Response.json({ ok: false, error: "Invalid writeKey" }, { status: 401 });
+      return json({ ok: false, error: "Invalid writeKey" }, 401);
     }
 
     // superenkel v1 “validering”
@@ -64,8 +81,8 @@ export async function POST(req: Request) {
 
     publish(evt);
 
-    return Response.json({ ok: true });
+    return json({ ok: true }, 200);
   } catch {
-    return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    return json({ ok: false, error: "Invalid JSON" }, 400);
   }
 }
