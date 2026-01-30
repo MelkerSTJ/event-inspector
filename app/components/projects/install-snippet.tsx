@@ -2,16 +2,17 @@
 
 import { useMemo, useState } from "react";
 
-export function InstallSnippet({
-  writeKey
-}: {
-  writeKey: string;
-}) {
+export function InstallSnippet({ writeKey }: { writeKey: string }) {
   const snippet = useMemo(() => {
+    const APP_URL =
+      process.env.NEXT_PUBLIC_EI_APP_URL?.replace(/\/$/, "") ||
+      "http://localhost:3000";
+
     return `<script>
-  window.__EI_WRITE_KEY__ = "${writeKey}";
+window.__EI_WRITE_KEY__ = "${writeKey}";
+window.__EI_ENDPOINT__ = "${APP_URL}/api/ingest";
 </script>
-<script async src="https://cdn.eventinspector.io/ei.js"></script>`;
+<script async src="${APP_URL}/ei.js"></script>`;
   }, [writeKey]);
 
   const [copied, setCopied] = useState(false);
@@ -28,7 +29,7 @@ export function InstallSnippet({
         <div>
           <h3 className="font-semibold text-gray-900">Install</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Paste this into GTM (Custom HTML tag) or your CMS header.
+            Paste this into GTM (Custom HTML tag) or your site header.
           </p>
         </div>
 
