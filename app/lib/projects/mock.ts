@@ -1,37 +1,41 @@
-export type Environment = {
-  id: string;
-  name: "Production" | "Staging" | "Development";
-  status: "live" | "paused";
-  writeKey: string;
-};
-
-export type Project = {
+export interface Project {
   id: string;
   name: string;
+  writeKey: string;
   domain: string;
-  environments: Environment[];
-};
+  createdAt: string;
+}
 
-export const mockProjects: Project[] = [
+// Mock projects database
+// IMPORTANT: The writeKey here must match what's used in the tracking snippet
+export const projects: Project[] = [
   {
-    id: "moteva",
-    name: "Moteva",
-    domain: "moteva.vercel.app",
-    environments: [
-      { id: "prod", name: "Production", status: "live", writeKey: "wk_moteva_prod_xxx" }
-    ]
+    id: 'moteva',
+    name: 'Moteva',
+    writeKey: 'wr_moteva_live_abc123xyz789',  // <-- ÄNDRA TILL DIN RIKTIGA WRITEKEY
+    domain: 'moteva.vercel.app',
+    createdAt: '2024-01-15T10:00:00Z',
   },
   {
-    id: "jacson",
-    name: "Jacson",
-    domain: "jacson.se",
-    environments: [
-      { id: "prod", name: "Production", status: "live", writeKey: "wk_jacson_prod_xxx" },
-      { id: "stage", name: "Staging", status: "paused", writeKey: "wk_jacson_stage_xxx" }
-    ]
-  }
+    id: 'demo',
+    name: 'Demo Project',
+    writeKey: 'wr_demo_live_demo123demo456',
+    domain: 'demo.example.com',
+    createdAt: '2024-01-10T08:00:00Z',
+  },
 ];
 
-export function getProjectById(id: string) {
-  return mockProjects.find((p) => p.id === id) ?? null;
+// Helper to find project by ID
+export function getProjectById(id: string): Project | undefined {
+  return projects.find((p) => p.id === id);
+}
+
+// Helper to find project by writeKey
+export function getProjectByWriteKey(writeKey: string): Project | undefined {
+  return projects.find((p) => p.writeKey === writeKey);
+}
+
+// Helper to validate writeKey
+export function isValidWriteKey(writeKey: string): boolean {
+  return projects.some((p) => p.writeKey === writeKey);
 }

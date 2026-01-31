@@ -1,63 +1,89 @@
-import { subscribe } from "app/lib/live/bus";
+import { NextRequest } from 'next/server';
+import { bus } from 'app/lib/live/bus';
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-/**
- * Format data as Server-Sent Event
- */
-function sse(data: unknown) {
-  return `data: ${JSON.stringify(data)}\n\n`;
+interface EventData {
+  params?: {
+    ei_session?: string;
+  };
+  projectId?: string;
+  name?: string;
+  [key: string]: unknown;
 }
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const sessionId = searchParams.get('session');
+  const projectId = searchParams.get('projectId');
 
-  const projectId = searchParams.get("projectId");
-  const envId = searchParams.get("envId");
+  console.log('[Stream] New connection:', { sessionId, projectId });
 
-  if (!projectId || !envId) {
-    return new Response("Missing projectId or envId", { status: 400 });
-  }
+  const encoder = new TextEncoder();
+  let heartbeatInterval: NodeJS.Timeout | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
-      const encoder = new TextEncoder();
-
-      // Initial hello message (client knows stream is alive)
-      controller.enqueue(
-        encoder.encode(sse({ type: "hello", projectId, envId }))
-      );
-
-      const unsubscribe = subscribe(projectId, envId, (evt) => {
-        controller.enqueue(
-          encoder.encode(sse({ type: "event", evt }))
-        );
+      // Send initial connection message
+      const connectMsg = JSON.stringify({
+        type: 'connected',
+        timestamp: new Date().toISOString(),
+        session: sessionId,
       });
+      controller.enqueue(encoder.encode(`data: ${connectMsg}\n\n`));
 
-      // Keep-alive ping (important for proxies / browsers)
-      const keepAlive = setInterval(() => {
-        controller.enqueue(encoder.encode(": keep-alive\n\n"));
-      }, 15000);
+      // Handler for incoming events
+      const eventHandler = (event: EventData) => {
+        // Filter by session if specified
+        if (sessionId && event.params?.ei_session !== sessionId) {
+          return;
+        }
 
-      const abort = () => {
-        clearInterval(keepAlive);
-        unsubscribe();
+        // Filter by project if specified
+        if (projectId && event.projectId !== projectId) {
+          return;
+        }
+
+        const message = JSON.stringify({
+          type: 'event',
+          evt: event,
+        });
+
         try {
-          controller.close();
-        } catch {
-          // ignore
+          controller.enqueue(encoder.encode(`data: ${message}\n\n`));
+          console.log('[Stream] Sent event:', event.name);
+        } catch (e) {
+          console.error('[Stream] Error sending event:', e);
         }
       };
 
-      req.signal?.addEventListener("abort", abort);
+      // Subscribe to events
+      bus.on('event', eventHandler);
+
+      // Heartbeat to keep connection alive
+      heartbeatInterval = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+        } catch (e) {
+          if (heartbeatInterval) clearInterval(heartbeatInterval);
+        }
+      }, 30000);
+    },
+    cancel() {
+      console.log('[Stream] Connection closed:', { sessionId });
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+      }
     }
   });
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive"
-    }
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    },
   });
 }
