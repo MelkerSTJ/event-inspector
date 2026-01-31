@@ -1,8 +1,8 @@
-export type StreamEvent = {
+// app/lib/live/bus.ts
+
+export type LiveEvent = {
   id: string;
   ts: number;
-  projectId: string;
-  envId: string;
   name: string;
   url: string;
   status: "ok" | "warn" | "error";
@@ -10,42 +10,42 @@ export type StreamEvent = {
   params: Record<string, unknown>;
 };
 
-type Subscriber = (evt: StreamEvent) => void;
+type Handler = (evt: LiveEvent) => void;
 
-const channels = new Map<string, Set<Subscriber>>();
-
-export function channelKey(projectId: string, envId: string) {
+function key(projectId: string, envId: string) {
   return `${projectId}:${envId}`;
 }
 
-export function subscribe(projectId: string, envId: string, fn: Subscriber) {
-  const key = channelKey(projectId, envId);
-  if (!channels.has(key)) channels.set(key, new Set());
-  channels.get(key)!.add(fn);
+const channels = new Map<string, Set<Handler>>();
 
-  console.log(`[BUS] ✅ New subscriber for ${key}. Total: ${channels.get(key)!.size}`);
+export const bus = {
+  publish(projectId: string, envId: string, evt: LiveEvent) {
+    const k = key(projectId, envId);
+    const subs = channels.get(k);
+    if (!subs || subs.size === 0) return;
+    subs.forEach((fn) => {
+      try {
+        fn(evt);
+      } catch {
+        // ignore subscriber errors
+      }
+    });
+  },
 
-  return () => {
-    channels.get(key)?.delete(fn);
-    if (channels.get(key)?.size === 0) channels.delete(key);
-    console.log(`[BUS] ❌ Unsubscribed from ${key}`);
-  };
-}
+  subscribe(projectId: string, envId: string, fn: Handler) {
+    const k = key(projectId, envId);
+    let set = channels.get(k);
+    if (!set) {
+      set = new Set();
+      channels.set(k, set);
+    }
+    set.add(fn);
 
-export function publish(evt: StreamEvent) {
-  const key = channelKey(evt.projectId, evt.envId);
-  const subs = channels.get(key);
-  
-  console.log(`[BUS] 📢 Publishing to ${key}. Subscribers: ${subs?.size || 0}`, {
-    name: evt.name,
-    url: evt.url,
-    status: evt.status
-  });
-
-  if (!subs) {
-    console.warn(`[BUS] ⚠️ No subscribers for ${key}`);
-    return;
+    return () => {
+      const curr = channels.get(k);
+      if (!curr) return;
+      curr.delete(fn);
+      if (curr.size === 0) channels.delete(k);
+    };
   }
-
-  for (const fn of subs) fn(evt);
-}
+};

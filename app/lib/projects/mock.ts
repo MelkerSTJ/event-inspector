@@ -18,7 +18,12 @@ export const mockProjects: Project[] = [
     name: "Moteva",
     domain: "moteva.vercel.app",
     environments: [
-      { id: "prod", name: "Production", status: "live", writeKey: "wk_moteva_prod_xxx" }
+      {
+        id: "prod",
+        name: "Production",
+        status: "live",
+        writeKey: "wk_moteva_prod_dev_123"
+      }
     ]
   },
   {
@@ -26,8 +31,18 @@ export const mockProjects: Project[] = [
     name: "Jacson",
     domain: "jacson.se",
     environments: [
-      { id: "prod", name: "Production", status: "live", writeKey: "wk_jacson_prod_xxx" },
-      { id: "stage", name: "Staging", status: "paused", writeKey: "wk_jacson_stage_xxx" }
+      {
+        id: "prod",
+        name: "Production",
+        status: "live",
+        writeKey: "wk_jacson_prod_dev_123"
+      },
+      {
+        id: "stage",
+        name: "Staging",
+        status: "paused",
+        writeKey: "wk_jacson_stage_dev_123"
+      }
     ]
   }
 ];
