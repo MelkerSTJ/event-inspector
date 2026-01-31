@@ -2,39 +2,23 @@
 
 import { useMemo, useState } from "react";
 
-function toEiJsUrl(ingestEndpoint: string) {
-  // ingestEndpoint förväntas vara typ: https://event-inspector-pi.vercel.app/api/ingest
-  // Vi vill alltid ladda:               https://event-inspector-pi.vercel.app/ei.js
-  try {
-    const u = new URL(ingestEndpoint);
-    u.pathname = "/ei.js";
-    u.search = "";
-    u.hash = "";
-    return u.toString();
-  } catch {
-    // fallback: om någon råkar skicka "/api/ingest" relativt
-    return "/ei.js";
-  }
-}
-
 export function InstallSnippet({
   writeKey,
-  endpoint
+  appUrl
 }: {
   writeKey: string;
-  endpoint: string; // ingest endpoint
+  appUrl: string; // t.ex. https://event-inspector-pi.vercel.app
 }) {
   const snippet = useMemo(() => {
-    const safeWriteKey = String(writeKey).replace(/"/g, '\\"');
-    const safeEndpoint = String(endpoint).replace(/"/g, '\\"');
-    const eiJsUrl = toEiJsUrl(endpoint).replace(/"/g, '\\"');
+    const safeWriteKey = (writeKey ?? "").replace(/"/g, '\\"');
+    const safeAppUrl = (appUrl ?? "").replace(/"/g, '\\"').replace(/\/$/, "");
 
     return `<script>
 window.__EI_WRITE_KEY__ = "${safeWriteKey}";
-window.__EI_ENDPOINT__ = "${safeEndpoint}";
+window.__EI_ENDPOINT__ = "${safeAppUrl}/api/ingest";
 </script>
-<script async src="${eiJsUrl}"></script>`;
-  }, [writeKey, endpoint]);
+<script async src="${safeAppUrl}/ei.js"></script>`;
+  }, [writeKey, appUrl]);
 
   const [copied, setCopied] = useState(false);
 

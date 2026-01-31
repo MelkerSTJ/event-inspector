@@ -77,7 +77,11 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
         </div>
       </div>
 
-      <InstallSnippet writeKey={selectedEnv.writeKey} endpoint={EI_INGEST_ENDPOINT} />
+      <InstallSnippet
+  writeKey={selectedEnv.writeKey}
+  appUrl={process.env.NEXT_PUBLIC_EI_APP_URL ?? ""}
+/>
+
     </div>
   );
 }
