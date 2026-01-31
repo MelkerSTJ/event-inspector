@@ -21,11 +21,7 @@ type IngestPayload = {
 
 function formatTime(ts: number) {
   const d = new Date(ts);
-  return d.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function badgeClasses(status: LiveEvent["status"]) {
@@ -34,11 +30,11 @@ function badgeClasses(status: LiveEvent["status"]) {
   return "border-red-200 bg-red-50 text-red-800";
 }
 
-function getStringParam(params: Record<string, unknown>, key: string): string | undefined {
+function getString(params: Record<string, unknown>, key: string) {
   const v = params[key];
   if (typeof v === "string") return v;
   if (typeof v === "number") return String(v);
-  return undefined;
+  return "";
 }
 
 function buildSamplePayload(projectId: string, envId: string): Omit<IngestPayload, "writeKey"> {
@@ -51,36 +47,27 @@ function buildSamplePayload(projectId: string, envId: string): Omit<IngestPayloa
   const params: Record<string, unknown> = {
     projectId,
     envId,
+    currency: "SEK",
     item_id: name === "view_item" || name === "add_to_cart" ? "sku_259686" : undefined,
-    value: name === "purchase" ? 1299 : name === "add_to_cart" ? 649 : undefined,
-    currency: "SEK"
+    value: name === "purchase" ? 1299 : name === "add_to_cart" ? 649 : undefined
   };
 
-  if (name === "add_to_cart") {
-    if (Math.random() < 0.4) params.currency = undefined; // warn
-  } else if (name === "purchase") {
-    if (Math.random() < 0.3) params.transaction_id = undefined; // error
-    else params.transaction_id = "t_" + Date.now();
-  }
+  if (name === "add_to_cart" && Math.random() < 0.4) params.currency = undefined;
+  if (name === "purchase" && Math.random() < 0.3) params.transaction_id = undefined;
 
-  return {
-    name,
-    url: `https://${projectId}.example.com${path}`,
-    params
-  };
+  return { name, url: `https://${projectId}.example.com${path}`, params };
 }
 
 export function LiveFeed({
   projectId,
-  environments
+  environments,
+  sessionFilter,
+  onSessionFilterChange
 }: {
   projectId: string;
-  environments: Array<{
-    id: string;
-    name: string;
-    status: "live" | "paused";
-    writeKey: string;
-  }>;
+  environments: Array<{ id: string; name: string; status: "live" | "paused"; writeKey: string }>;
+  sessionFilter?: string; // controlled (optional)
+  onSessionFilterChange?: (v: string) => void; // controlled (optional)
 }) {
   const defaultEnvId = environments[0]?.id ?? "prod";
   const [envId, setEnvId] = useState(defaultEnvId);
@@ -90,7 +77,9 @@ export function LiveFeed({
 
   const [nameFilter, setNameFilter] = useState("");
   const [urlFilter, setUrlFilter] = useState("");
-  const [sessionFilter, setSessionFilter] = useState("");
+
+  const [sessionFilterInternal, setSessionFilterInternal] = useState("");
+  const sf = sessionFilter ?? sessionFilterInternal;
 
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
@@ -110,9 +99,10 @@ export function LiveFeed({
 
     es.onmessage = (msg) => {
       try {
-        const data = JSON.parse(msg.data) as { type?: string; evt?: LiveEvent };
+        const data = JSON.parse(msg.data);
         if (data?.type === "event" && data?.evt) {
-          setEvents((prev) => [data.evt!, ...prev].slice(0, 200));
+          const evt = data.evt as LiveEvent;
+          setEvents((prev) => [evt, ...prev].slice(0, 200));
         }
       } catch {
         // ignore
@@ -121,39 +111,29 @@ export function LiveFeed({
 
     es.onerror = () => setConnected(false);
 
-    return () => {
-      es.close();
-    };
+    return () => es.close();
   }, [projectId, envId]);
 
   const filtered = useMemo(() => {
     const nf = nameFilter.trim().toLowerCase();
     const uf = urlFilter.trim().toLowerCase();
-    const sf = sessionFilter.trim().toLowerCase();
+    const sff = (sf || "").trim().toLowerCase();
 
     return events.filter((e) => {
       const okName = !nf || e.name.toLowerCase().includes(nf);
       const okUrl = !uf || e.url.toLowerCase().includes(uf);
 
-      // We support both "ei_session" (new) and "sessionId" (if you used older naming)
-      const sid =
-        getStringParam(e.params, "ei_session") ??
-        getStringParam(e.params, "sessionId") ??
-        "";
-
-      const okSession = !sf || sid.toLowerCase().includes(sf);
+      const sid = getString(e.params, "ei_session") || getString(e.params, "sessionId");
+      const okSession = !sff || sid.toLowerCase().includes(sff);
 
       return okName && okUrl && okSession;
     });
-  }, [events, nameFilter, urlFilter, sessionFilter]);
+  }, [events, nameFilter, urlFilter, sf]);
 
   async function sendTestEvent() {
     const base = buildSamplePayload(projectId, envId);
 
-    const payload: IngestPayload = {
-      writeKey: env.writeKey,
-      ...base
-    };
+    const payload: IngestPayload = { writeKey: env.writeKey, ...base };
 
     await fetch("/api/ingest", {
       method: "POST",
@@ -173,6 +153,11 @@ export function LiveFeed({
     setEnvId(nextEnvId);
   }
 
+  function setSession(v: string) {
+    if (onSessionFilterChange) onSessionFilterChange(v);
+    else setSessionFilterInternal(v);
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border bg-white p-4">
@@ -190,9 +175,7 @@ export function LiveFeed({
                     onClick={() => changeEnv(e.id)}
                     className={[
                       "rounded-lg border px-3 py-1.5 text-sm font-semibold transition",
-                      active
-                        ? "border-black bg-gray-50 text-gray-900"
-                        : "text-gray-700 hover:bg-gray-50"
+                      active ? "border-black bg-gray-50 text-gray-900" : "text-gray-700 hover:bg-gray-50"
                     ].join(" ")}
                   >
                     {e.name}
@@ -249,8 +232,8 @@ export function LiveFeed({
           <div>
             <div className="text-xs font-semibold text-gray-700">Filter by session id</div>
             <input
-              value={sessionFilter}
-              onChange={(e) => setSessionFilter(e.target.value)}
+              value={sf}
+              onChange={(e) => setSession(e.target.value)}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-black focus:ring-2 focus:ring-black/10"
               placeholder="e.g. TEST123"
             />
@@ -291,10 +274,17 @@ export function LiveFeed({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-gray-900">{e.name}</span>
-                          <span className={["rounded-md border px-2 py-0.5 text-xs font-semibold", badgeClasses(e.status)].join(" ")}>
+                          <span
+                            className={[
+                              "rounded-md border px-2 py-0.5 text-xs font-semibold",
+                              badgeClasses(e.status)
+                            ].join(" ")}
+                          >
                             {e.status.toUpperCase()}
                           </span>
-                          {e.message ? <span className="text-xs font-semibold text-gray-600">{e.message}</span> : null}
+                          {e.message ? (
+                            <span className="text-xs font-semibold text-gray-600">{e.message}</span>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-xs text-gray-600">{e.url}</div>
                       </div>
