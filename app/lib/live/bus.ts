@@ -23,16 +23,29 @@ export function subscribe(projectId: string, envId: string, fn: Subscriber) {
   if (!channels.has(key)) channels.set(key, new Set());
   channels.get(key)!.add(fn);
 
+  console.log(`[BUS] ✅ New subscriber for ${key}. Total: ${channels.get(key)!.size}`);
+
   return () => {
     channels.get(key)?.delete(fn);
     if (channels.get(key)?.size === 0) channels.delete(key);
+    console.log(`[BUS] ❌ Unsubscribed from ${key}`);
   };
 }
 
 export function publish(evt: StreamEvent) {
   const key = channelKey(evt.projectId, evt.envId);
   const subs = channels.get(key);
-  if (!subs) return;
+  
+  console.log(`[BUS] 📢 Publishing to ${key}. Subscribers: ${subs?.size || 0}`, {
+    name: evt.name,
+    url: evt.url,
+    status: evt.status
+  });
+
+  if (!subs) {
+    console.warn(`[BUS] ⚠️ No subscribers for ${key}`);
+    return;
+  }
 
   for (const fn of subs) fn(evt);
 }
