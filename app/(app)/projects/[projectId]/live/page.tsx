@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getProjectById } from "app/lib/projects/mock";
-import { LiveFeed } from "app/components/live/live-feed";
+import { LivePreviewPanel } from "app/components/live/live-preview-panel";
 
 export default async function ProjectLivePage({
   params
@@ -15,7 +15,8 @@ export default async function ProjectLivePage({
       <div className="p-6">
         <h2 className="text-2xl font-semibold">Project not found</h2>
         <p className="mt-2 text-gray-600">
-          We couldn’t find a project with id: <span className="font-mono">{projectId}</span>
+          We couldn’t find a project with id:{" "}
+          <span className="font-mono">{projectId}</span>
         </p>
         <Link href="/projects" className="mt-6 inline-block underline">
           Back to projects
@@ -24,13 +25,21 @@ export default async function ProjectLivePage({
     );
   }
 
+  const envs = project.environments.map((e) => ({
+    id: e.id,
+    name: e.name,
+    status: e.status,
+    writeKey: e.writeKey
+  }));
+
   return (
     <div className="p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">Live</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Project: <span className="font-mono">{project.id}</span> • {project.domain}
+            Project: <span className="font-mono">{project.id}</span> •{" "}
+            {project.domain}
           </p>
         </div>
 
@@ -43,16 +52,11 @@ export default async function ProjectLivePage({
       </div>
 
       <div className="mt-6">
-      <LiveFeed
-  projectId={project.id}
-  environments={project.environments.map((e) => ({
-    id: e.id,
-    name: e.name,
-    status: e.status,
-    writeKey: e.writeKey
-  }))}
-/>
-
+        <LivePreviewPanel
+          projectId={project.id}
+          projectDomain={project.domain}
+          environments={envs}
+        />
       </div>
     </div>
   );
