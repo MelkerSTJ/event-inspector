@@ -1,60 +1,153 @@
+/**
+ * Event Inspector Tracking Script (ei.js)
+ * Loads via GTM or direct script tag
+ * Sends events to Event Inspector backend
+ */
 (function () {
-  var WRITE_KEY = window.__EI_WRITE_KEY__;
-  var ENDPOINT = window.__EI_ENDPOINT__;
+  'use strict';
 
-  if (!WRITE_KEY || !ENDPOINT) return;
+  // === Configuration ===
+  var writeKey = window.__EI_WRITE_KEY__;
+  var endpoint = window.__EI_ENDPOINT__ || 'https://event-inspector-pi.vercel.app/api/ingest';
 
-  function getSession() {
-    try {
-      return new URL(location.href).searchParams.get("ei_session") || "";
-    } catch {
-      return "";
+  // === Debug logging ===
+  function log(level, message, data) {
+    var prefix = '[EI.js]';
+    if (level === 'error') {
+      console.error(prefix, message, data || '');
+    } else if (level === 'warn') {
+      console.warn(prefix, message, data || '');
+    } else {
+      console.log(prefix, message, data || '');
     }
   }
 
-  function send(name, params) {
-    try {
-      var payload = {
-        writeKey: WRITE_KEY,
-        name: name,
-        url: location.href,
-        params: params || {}
-      };
-
-      // koppla session om den finns
-      var sid = getSession();
-      if (sid) payload.params.ei_session = sid;
-
-      fetch(ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        keepalive: true
-      }).catch(function () {});
-    } catch {}
+  // === Validate configuration ===
+  if (!writeKey) {
+    log('error', 'Missing writeKey! Set window.__EI_WRITE_KEY__ before loading ei.js');
+    log('error', 'Current values:', {
+      writeKey: writeKey,
+      endpoint: endpoint
+    });
+    return;
   }
 
-  // Exponera global
-  window.ei_track = function (name, params) {
-    send(name, params);
+  log('info', 'Initialized with writeKey:', writeKey.substring(0, 8) + '...');
+  log('info', 'Endpoint:', endpoint);
+
+  // === Get session ID from URL ===
+  function getSessionId() {
+    var params = new URLSearchParams(window.location.search);
+    return params.get('ei_session') || null;
+  }
+
+  // === Generate event ID ===
+  function generateEventId() {
+    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  }
+
+  // === Track function ===
+  function track(eventName, eventParams) {
+    var sessionId = getSessionId();
+    
+    var payload = {
+      writeKey: writeKey,
+      name: eventName,
+      url: window.location.href,
+      params: Object.assign({}, eventParams || {}, {
+        ei_session: sessionId,
+        page_title: document.title,
+        referrer: document.referrer,
+        timestamp: new Date().toISOString(),
+        event_id: generateEventId(),
+        user_agent: navigator.userAgent,
+        screen_width: window.screen.width,
+        screen_height: window.screen.height,
+        viewport_width: window.innerWidth,
+        viewport_height: window.innerHeight
+      })
+    };
+
+    log('info', 'Tracking event:', eventName, payload);
+
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      mode: 'cors'
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          return response.text().then(function (text) {
+            log('error', 'Ingest failed (' + response.status + '):', text);
+            if (response.status === 401) {
+              log('error', 'WriteKey validation failed. Check that writeKey matches your project configuration.');
+            }
+          });
+        } else {
+          log('info', 'Event sent successfully:', eventName);
+        }
+      })
+      .catch(function (error) {
+        log('error', 'Network error:', error.message);
+      });
+  }
+
+  // === Expose global track function ===
+  window._ei_track = track;
+  log('info', 'window._ei_track is now available');
+
+  // === Auto-track page views ===
+  function trackPageView() {
+    track('page_view', {
+      path: window.location.pathname,
+      search: window.location.search,
+      hash: window.location.hash
+    });
+  }
+
+  // === SPA route change detection ===
+  var lastUrl = window.location.href;
+
+  function checkUrlChange() {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      log('info', 'SPA route change detected');
+      trackPageView();
+    }
+  }
+
+  // Listen for popstate (back/forward navigation)
+  window.addEventListener('popstate', function () {
+    setTimeout(checkUrlChange, 0);
+  });
+
+  // Intercept pushState and replaceState
+  var originalPushState = history.pushState;
+  var originalReplaceState = history.replaceState;
+
+  history.pushState = function () {
+    originalPushState.apply(this, arguments);
+    setTimeout(checkUrlChange, 0);
   };
 
-  // auto page_view
-  send("page_view", {});
+  history.replaceState = function () {
+    originalReplaceState.apply(this, arguments);
+    setTimeout(checkUrlChange, 0);
+  };
 
-  // SPA navigation hooks
-  function hookHistory(fnName) {
-    var orig = history[fnName];
-    history[fnName] = function () {
-      var res = orig.apply(this, arguments);
-      send("page_view", { navigation: fnName });
-      return res;
-    };
+  // Fallback: poll for URL changes (some SPAs use hash routing)
+  setInterval(checkUrlChange, 1000);
+
+  // === Initial page view ===
+  if (document.readyState === 'complete') {
+    trackPageView();
+  } else {
+    window.addEventListener('load', trackPageView);
   }
 
-  hookHistory("pushState");
-  hookHistory("replaceState");
-  window.addEventListener("popstate", function () {
-    send("page_view", { navigation: "popstate" });
-  });
+  log('info', 'Event Inspector tracking active');
 })();
+
