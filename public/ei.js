@@ -1,91 +1,60 @@
 (function () {
-  try {
-    var writeKey = window.__EI_WRITE_KEY__;
-    var endpoint = window.__EI_ENDPOINT__ || "/api/ingest";
+  var WRITE_KEY = window.__EI_WRITE_KEY__;
+  var ENDPOINT = window.__EI_ENDPOINT__;
 
-    if (!writeKey) {
-      console.warn("[EI] Missing write key");
-      return;
+  if (!WRITE_KEY || !ENDPOINT) return;
+
+  function getSession() {
+    try {
+      return new URL(location.href).searchParams.get("ei_session") || "";
+    } catch {
+      return "";
     }
+  }
 
-    function randomId() {
-      return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
-    }
-
-    function getSessionId() {
-      try {
-        var url = new URL(window.location.href);
-        var q = url.searchParams.get("ei_session");
-        if (q) {
-          sessionStorage.setItem("__ei_session__", q);
-          return q;
-        }
-        var stored = sessionStorage.getItem("__ei_session__");
-        if (stored) return stored;
-
-        var id = randomId();
-        sessionStorage.setItem("__ei_session__", id);
-        return id;
-      } catch (e) {
-        return randomId();
-      }
-    }
-
-    var sessionId = getSessionId();
-
-    function safeReadJson(res) {
-      var ct = (res.headers && res.headers.get && res.headers.get("content-type")) || "";
-      if (ct.indexOf("application/json") !== -1) return res.json();
-      return res.text().then(function (t) {
-        if (!t) return { ok: true };
-        try {
-          return JSON.parse(t);
-        } catch (e) {
-          return { ok: true, raw: t };
-        }
-      });
-    }
-
-    function send(name, params) {
+  function send(name, params) {
+    try {
       var payload = {
-        writeKey: writeKey,
+        writeKey: WRITE_KEY,
         name: name,
-        url: window.location.href,
+        url: location.href,
         params: params || {}
       };
 
-      // ALWAYS include session
-      payload.params.ei_session = sessionId;
+      // koppla session om den finns
+      var sid = getSession();
+      if (sid) payload.params.ei_session = sid;
 
-      fetch(endpoint, {
+      fetch(ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      })
-        .then(function (res) {
-          return safeReadJson(res);
-        })
-        .then(function (json) {
-          console.debug("[EI] ingest response", json);
-        })
-        .catch(function (err) {
-          console.error("[EI] ingest error", err);
-        });
-    }
-
-    // auto page_view
-    send("page_view", {
-      title: document.title,
-      referrer: document.referrer || null
-    });
-
-    // manual tracking
-    window.__ei_track = function (name, params) {
-      send(name, params || {});
-    };
-
-    console.debug("[EI] loaded", { endpoint: endpoint, sessionId: sessionId });
-  } catch (e) {
-    console.error("[EI] fatal error", e);
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(function () {});
+    } catch {}
   }
+
+  // Exponera global
+  window.ei_track = function (name, params) {
+    send(name, params);
+  };
+
+  // auto page_view
+  send("page_view", {});
+
+  // SPA navigation hooks
+  function hookHistory(fnName) {
+    var orig = history[fnName];
+    history[fnName] = function () {
+      var res = orig.apply(this, arguments);
+      send("page_view", { navigation: fnName });
+      return res;
+    };
+  }
+
+  hookHistory("pushState");
+  hookHistory("replaceState");
+  window.addEventListener("popstate", function () {
+    send("page_view", { navigation: "popstate" });
+  });
 })();

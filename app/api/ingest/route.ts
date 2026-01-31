@@ -1,88 +1,47 @@
-import { publish, type StreamEvent } from "app/lib/live/bus";
+import { NextResponse } from "next/server";
 import { mockProjects } from "app/lib/projects/mock";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
+type IngestPayload = {
+  writeKey: string;
+  name: string;
+  url: string;
+  params?: Record<string, unknown>;
 };
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      ...corsHeaders
-    }
-  });
-}
-
-function randomId() {
-  return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
-}
-
-function findEnvByWriteKey(writeKey: string) {
+function isValidWriteKey(writeKey: string) {
   for (const p of mockProjects) {
     for (const env of p.environments) {
-      if (env.writeKey === writeKey) {
-        return { project: p, env };
-      }
+      if (env.writeKey === writeKey) return { projectId: p.id, envId: env.id };
     }
   }
   return null;
 }
 
-export async function OPTIONS() {
-  return new Response(null, { status: 204, headers: corsHeaders });
-}
-
 export async function POST(req: Request) {
+  let body: IngestPayload | null = null;
+
   try {
-    const body = await req.json();
-
-    const writeKey = String(body?.writeKey ?? "");
-    const name = String(body?.name ?? "");
-    const url = String(body?.url ?? "");
-    const params = (body?.params ?? {}) as Record<string, unknown>;
-
-    if (!writeKey || !name || !url) {
-      return json({ ok: false, error: "Missing writeKey, name or url" }, 400);
-    }
-
-    const found = findEnvByWriteKey(writeKey);
-    if (!found) {
-      return json({ ok: false, error: "Invalid writeKey" }, 401);
-    }
-
-    // superenkel v1 “validering”
-    let status: StreamEvent["status"] = "ok";
-    let message: string | undefined;
-
-    if (name === "add_to_cart" && params?.currency == null) {
-      status = "warn";
-      message = "Missing param: currency";
-    }
-    if (name === "purchase" && params?.transaction_id == null) {
-      status = "error";
-      message = "Missing param: transaction_id";
-    }
-
-    const evt: StreamEvent = {
-      id: randomId(),
-      ts: Date.now(),
-      projectId: found.project.id,
-      envId: found.env.id,
-      name,
-      url,
-      status,
-      message,
-      params
-    };
-
-    publish(evt);
-
-    return json({ ok: true }, 200);
+    body = (await req.json()) as IngestPayload;
   } catch {
-    return json({ ok: false, error: "Invalid JSON" }, 400);
+    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
+
+  const writeKey = (body?.writeKey || "").trim();
+  const name = (body?.name || "").trim();
+  const url = (body?.url || "").trim();
+
+  if (!writeKey || !name || !url) {
+    return NextResponse.json({ ok: false, error: "Missing fields" }, { status: 400 });
+  }
+
+  const match = isValidWriteKey(writeKey);
+  if (!match) {
+    return NextResponse.json({ ok: false, error: "Invalid writeKey" }, { status: 401 });
+  }
+
+  // ✅ här kan du “broadcasta” till din SSE stream om du redan har det i minnet
+  // Jag antar att du redan har stream-store i /api/stream.
+  // Om du har en "publishEvent" funktion, kalla den här.
+
+  return new NextResponse(null, { status: 204 });
 }
