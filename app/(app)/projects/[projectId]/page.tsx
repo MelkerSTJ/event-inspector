@@ -2,13 +2,12 @@ import Link from "next/link";
 import { getProjectById } from "app/lib/projects/mock";
 import { ProjectInstallPanel } from "app/components/projects/project-install-panel";
 
+type Props = {
+  params: { projectId: string };
+};
 
-export default async function ProjectPage({
-  params
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
-  const { projectId } = await params;
+export default function ProjectPage({ params }: Props) {
+  const projectId = params.projectId;
   const project = getProjectById(projectId);
 
   if (!project) {
@@ -16,7 +15,8 @@ export default async function ProjectPage({
       <div className="p-6">
         <h2 className="text-2xl font-semibold">Project not found</h2>
         <p className="mt-2 text-gray-600">
-          We couldn’t find a project with id: <span className="font-mono">{projectId}</span>
+          We couldn’t find a project with id:{" "}
+          <span className="font-mono">{projectId}</span>
         </p>
         <Link href="/projects" className="mt-6 inline-block underline">
           Back to projects
@@ -40,7 +40,7 @@ export default async function ProjectPage({
                   "rounded-md border px-2 py-1 text-xs",
                   env.status === "live"
                     ? "border-green-200 bg-green-50 text-green-800"
-                    : "border-gray-200 bg-gray-50 text-gray-700"
+                    : "border-gray-200 bg-gray-50 text-gray-700",
                 ].join(" ")}
               >
                 {env.name} • {env.status}
@@ -71,7 +71,9 @@ export default async function ProjectPage({
                 className="flex items-center justify-between rounded-lg border p-3"
               >
                 <div>
-                  <div className="text-sm font-semibold text-gray-900">{env.name}</div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {env.name}
+                  </div>
                   <div className="text-xs text-gray-600">Status: {env.status}</div>
                   <div className="mt-2 font-mono text-xs text-gray-800">
                     {env.writeKey}
@@ -87,9 +89,8 @@ export default async function ProjectPage({
         </div>
 
         <div className="mt-6">
-  <ProjectInstallPanel project={project} />
-</div>
-
+          <ProjectInstallPanel project={project} />
+        </div>
       </div>
     </div>
   );

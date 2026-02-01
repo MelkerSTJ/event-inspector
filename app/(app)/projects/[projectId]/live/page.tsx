@@ -2,12 +2,12 @@ import Link from "next/link";
 import { getProjectById } from "app/lib/projects/mock";
 import { LivePreviewPanel } from "app/components/live/live-preview-panel";
 
-export default async function ProjectLivePage({
-  params,
-}: {
+type Props = {
   params: { projectId: string };
-}) {
-  const { projectId } = params;
+};
+
+export default function ProjectLivePage({ params }: Props) {
+  const projectId = params.projectId;
   const project = getProjectById(projectId);
 
   if (!project) {
@@ -15,8 +15,7 @@ export default async function ProjectLivePage({
       <div className="p-6">
         <h2 className="text-2xl font-semibold">Project not found</h2>
         <p className="mt-2 text-gray-600">
-          We couldn’t find a project with id:{" "}
-          <span className="font-mono">{projectId}</span>
+          Received projectId: <span className="font-mono">{projectId}</span>
         </p>
         <Link href="/projects" className="mt-6 inline-block underline">
           Back to projects
@@ -25,8 +24,6 @@ export default async function ProjectLivePage({
     );
   }
 
-  // Du kan också skicka project.environments direkt om LivePreviewPanel använder samma shape,
-  // men jag behåller din mapping för att vara safe.
   const envs = project.environments.map((e) => ({
     id: e.id,
     name: e.name,
@@ -40,8 +37,7 @@ export default async function ProjectLivePage({
         <div>
           <h2 className="text-2xl font-semibold">Live</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Project: <span className="font-mono">{project.id}</span> •{" "}
-            {project.domain}
+            Project: <span className="font-mono">{project.id}</span> • {project.domain}
           </p>
         </div>
 
