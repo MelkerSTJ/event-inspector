@@ -1,51 +1,25 @@
-export type StreamEvent = {
-  id: string;
-  ts: number;
-  projectId: string;
-  envId: string;
-  name: string;
-  url: string;
-  status: "ok" | "warn" | "error";
-  message?: string;
-  params: Record<string, unknown>;
-};
+import { EventEmitter } from 'events';
 
-type Subscriber = (evt: StreamEvent) => void;
+// Create a singleton event bus for SSE streaming
+class EventBus extends EventEmitter {
+  private static instance: EventBus;
 
-const channels = new Map<string, Set<Subscriber>>();
-
-export function channelKey(projectId: string, envId: string) {
-  return `${projectId}:${envId}`;
-}
-
-export function subscribe(projectId: string, envId: string, fn: Subscriber) {
-  const key = channelKey(projectId, envId);
-  if (!channels.has(key)) channels.set(key, new Set());
-  channels.get(key)!.add(fn);
-
-  console.log(`[BUS] ✅ New subscriber for ${key}. Total: ${channels.get(key)!.size}`);
-
-  return () => {
-    channels.get(key)?.delete(fn);
-    if (channels.get(key)?.size === 0) channels.delete(key);
-    console.log(`[BUS] ❌ Unsubscribed from ${key}`);
-  };
-}
-
-export function publish(evt: StreamEvent) {
-  const key = channelKey(evt.projectId, evt.envId);
-  const subs = channels.get(key);
-  
-  console.log(`[BUS] 📢 Publishing to ${key}. Subscribers: ${subs?.size || 0}`, {
-    name: evt.name,
-    url: evt.url,
-    status: evt.status
-  });
-
-  if (!subs) {
-    console.warn(`[BUS] ⚠️ No subscribers for ${key}`);
-    return;
+  private constructor() {
+    super();
+    // Increase max listeners to handle multiple SSE connections
+    this.setMaxListeners(100);
   }
 
-  for (const fn of subs) fn(evt);
+  public static getInstance(): EventBus {
+    if (!EventBus.instance) {
+      EventBus.instance = new EventBus();
+    }
+    return EventBus.instance;
+  }
 }
+
+// Export singleton instance
+export const bus = EventBus.getInstance();
+
+// Also export the class for type usage
+export { EventBus };

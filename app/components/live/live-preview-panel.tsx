@@ -2,100 +2,104 @@
 
 import { useMemo, useState } from "react";
 import { LiveFeed } from "app/components/live/live-feed";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
-function randomSessionId() {
-  return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
-}
+export type EnvironmentStatus = "live" | "test";
 
-function toHttpsUrl(domain: string) {
-  const d = domain.trim();
-  if (!d) return "";
-  if (d.startsWith("http://") || d.startsWith("https://")) return d;
-  return `https://${d}`;
-}
+export type LivePreviewEnvironment = {
+  id: string;
+  name: string;
+  status: EnvironmentStatus;
+  writeKey: string;
+};
 
-export function LivePreviewPanel({
-  projectId,
-  projectDomain,
-  environments
-}: {
+export type LivePreviewPanelProps = {
   projectId: string;
-  projectDomain: string;
-  environments: Array<{ id: string; name: string; status: "live" | "paused"; writeKey: string }>;
-}) {
-  const [sessionId, setSessionId] = useState<string>("");
-  const [previewUrl, setPreviewUrl] = useState<string>("");
+  environments: LivePreviewEnvironment[];
+};
 
-  const base = useMemo(() => toHttpsUrl(projectDomain), [projectDomain]);
+export function LivePreviewPanel({ projectId, environments }: LivePreviewPanelProps) {
+  // default: välj live env om den finns, annars första
+  const defaultEnvId = useMemo(() => {
+    const live = environments.find((e) => e.status === "live");
+    return live?.id ?? environments[0]?.id ?? "";
+  }, [environments]);
 
-  function start() {
-    const sid = randomSessionId();
-    setSessionId(sid);
+  const [selectedEnvId, setSelectedEnvId] = useState<string>(defaultEnvId);
 
-    const url = `${base}/?ei_session=${encodeURIComponent(sid)}`;
-    setPreviewUrl(url);
+  const selectedEnv = useMemo(() => {
+    return environments.find((e) => e.id === selectedEnvId) ?? null;
+  }, [environments, selectedEnvId]);
+
+  const sessionId = useMemo(() => {
+    // enkel "session id" för filtrering i din SSE (valfritt)
+    // kan bytas senare mot riktig session från snippet
+    return selectedEnv ? `${projectId}:${selectedEnv.id}` : null;
+  }, [projectId, selectedEnv]);
+
+  if (!environments.length) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Live Preview</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          No environments found for this project.
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-gray-900">Live preview</div>
-            <div className="mt-1 text-sm text-gray-600">
-              Starts a session and opens the site in an iframe. Events are filtered by that session.
-            </div>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardTitle className="text-base">Environments</CardTitle>
+          <Badge variant="outline">{projectId}</Badge>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          <div className="text-xs text-muted-foreground">
+            Pick environment to view incoming events.
           </div>
 
-          <button
-            type="button"
-            onClick={start}
-            disabled={!base}
-            className={[
-              "rounded-lg px-4 py-2 text-sm font-semibold text-white",
-              base ? "bg-black hover:bg-black/90" : "bg-black/40 cursor-not-allowed"
-            ].join(" ")}
-          >
-            Start live preview
-          </button>
-        </div>
-
-        <div className="mt-3 text-xs text-gray-700">
-          Target: <span className="font-mono">{base || "(missing domain)"}</span>
-        </div>
-        {sessionId ? (
-          <div className="mt-2 text-xs text-gray-700">
-            Session: <span className="font-mono">{sessionId}</span>
+          <div className="flex flex-wrap gap-2">
+            {environments.map((env) => {
+              const active = env.id === selectedEnvId;
+              return (
+                <Button
+                  key={env.id}
+                  type="button"
+                  size="sm"
+                  variant={active ? "default" : "outline"}
+                  onClick={() => setSelectedEnvId(env.id)}
+                >
+                  {env.name}
+                  <span className="ml-2 text-xs opacity-80">• {env.status}</span>
+                </Button>
+              );
+            })}
           </div>
-        ) : null}
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-2xl border bg-white overflow-hidden">
-          <div className="border-b p-3 text-sm font-semibold text-gray-900">Site</div>
+          {selectedEnv && (
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold">{selectedEnv.name}</div>
+                <Badge variant={selectedEnv.status === "live" ? "secondary" : "outline"}>
+                  {selectedEnv.status}
+                </Badge>
+              </div>
 
-          {previewUrl ? (
-            <iframe
-              title="Live preview"
-              src={previewUrl}
-              className="h-[75vh] w-full"
-            />
-          ) : (
-            <div className="p-8 text-sm text-gray-600">
-              Click <span className="font-semibold">Start live preview</span> to open the site.
+              <div className="mt-2 text-xs text-muted-foreground">Write key</div>
+              <div className="mt-1 font-mono text-xs break-all">{selectedEnv.writeKey}</div>
             </div>
           )}
-        </div>
+        </CardContent>
+      </Card>
 
-        <div>
-          <LiveFeed
-            projectId={projectId}
-            environments={environments}
-            sessionFilter={sessionId}
-            onSessionFilterChange={(v) => setSessionId(v)}
-          />
-        </div>
-      </div>
+      <LiveFeed projectId={projectId} sessionId={sessionId} />
     </div>
   );
 }

@@ -13,9 +13,18 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
   const selectedEnv = useMemo(() => {
     return (
       project.environments.find((e) => e.id === selectedEnvId) ??
-      project.environments[0]
+      project.environments[0] ??
+      null
     );
   }, [project.environments, selectedEnvId]);
+
+  const appUrl = useMemo(() => {
+    // NEXT_PUBLIC_EI_APP_URL kan du sätta i .env.local / Vercel
+    const fromEnv = process.env.NEXT_PUBLIC_EI_APP_URL?.trim();
+    if (fromEnv) return fromEnv.replace(/\/$/, "");
+    // fallback för dev
+    return "http://localhost:3000";
+  }, []);
 
   if (!selectedEnv) return null;
 
@@ -38,7 +47,7 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
                 onClick={() => setSelectedEnvId(env.id)}
                 className={[
                   "w-full rounded-lg border p-3 text-left transition",
-                  isSelected ? "border-black bg-gray-50" : "hover:bg-gray-50"
+                  isSelected ? "border-black bg-gray-50" : "hover:bg-gray-50",
                 ].join(" ")}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -59,7 +68,7 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
                       "rounded-md border px-2 py-1 text-xs font-semibold",
                       env.status === "live"
                         ? "border-green-200 bg-green-50 text-green-800"
-                        : "border-gray-200 bg-gray-50 text-gray-700"
+                        : "border-gray-200 bg-gray-50 text-gray-700",
                     ].join(" ")}
                   >
                     {env.status}
@@ -78,10 +87,10 @@ export function ProjectInstallPanel({ project }: { project: Project }) {
       </div>
 
       <InstallSnippet
-  writeKey={selectedEnv.writeKey}
-  appUrl={process.env.NEXT_PUBLIC_EI_APP_URL ?? ""}
-/>
-
+        writeKey={selectedEnv.writeKey}
+        appUrl={appUrl}
+        ingestEndpoint={EI_INGEST_ENDPOINT}
+      />
     </div>
   );
 }

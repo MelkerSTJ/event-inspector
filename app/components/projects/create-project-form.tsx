@@ -30,7 +30,7 @@ function Field({
   label,
   hint,
   error,
-  children
+  children,
 }: {
   label: string;
   hint?: string;
@@ -52,7 +52,7 @@ function Field({
 export function CreateProjectForm({
   existingIds,
   onCreate,
-  onCancel
+  onCancel,
 }: {
   existingIds: string[];
   onCreate: (project: Project) => void;
@@ -64,7 +64,7 @@ export function CreateProjectForm({
 
   const [touched, setTouched] = useState<{ name: boolean; domain: boolean }>({
     name: false,
-    domain: false
+    domain: false,
   });
 
   const computedId = useMemo(() => slugify(name) || "new-project", [name]);
@@ -92,29 +92,35 @@ export function CreateProjectForm({
     setTouched({ name: true, domain: true });
     if (!canSubmit) return;
 
+    // Must match Project/Environment types in mock.ts
     const envs: Project["environments"] = [
       {
         id: "prod",
         name: "Production",
         status: "live",
-        writeKey: makeWriteKey(computedId, "prod")
-      }
+        writeKey: makeWriteKey(computedId, "prod"),
+      },
     ];
 
     if (includeStaging) {
       envs.push({
         id: "stage",
         name: "Staging",
-        status: "paused",
-        writeKey: makeWriteKey(computedId, "stage")
+        status: "test", // <-- was "paused" (not allowed anymore)
+        writeKey: makeWriteKey(computedId, "stage"),
       });
     }
+
+    const now = new Date().toISOString();
 
     const project: Project = {
       id: computedId,
       name: name.trim(),
       domain: normalizeDomain(domain),
-      environments: envs
+      createdAt: now,
+      // project-level writeKey: valfritt men krävs av typen
+      writeKey: makeWriteKey(computedId, "project"),
+      environments: envs,
     };
 
     onCreate(project);
@@ -181,7 +187,7 @@ export function CreateProjectForm({
           disabled={!canSubmit}
           className={[
             "rounded-lg px-4 py-2 text-sm font-semibold text-white",
-            canSubmit ? "bg-black hover:bg-black/90" : "bg-black/40 cursor-not-allowed"
+            canSubmit ? "bg-black hover:bg-black/90" : "bg-black/40 cursor-not-allowed",
           ].join(" ")}
         >
           Create

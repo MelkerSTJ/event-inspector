@@ -3,11 +3,11 @@ import { getProjectById } from "app/lib/projects/mock";
 import { LivePreviewPanel } from "app/components/live/live-preview-panel";
 
 export default async function ProjectLivePage({
-  params
+  params,
 }: {
-  params: Promise<{ projectId: string }>;
+  params: { projectId: string };
 }) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const project = getProjectById(projectId);
 
   if (!project) {
@@ -25,11 +25,13 @@ export default async function ProjectLivePage({
     );
   }
 
+  // Du kan också skicka project.environments direkt om LivePreviewPanel använder samma shape,
+  // men jag behåller din mapping för att vara safe.
   const envs = project.environments.map((e) => ({
     id: e.id,
     name: e.name,
     status: e.status,
-    writeKey: e.writeKey
+    writeKey: e.writeKey,
   }));
 
   return (
@@ -52,11 +54,7 @@ export default async function ProjectLivePage({
       </div>
 
       <div className="mt-6">
-        <LivePreviewPanel
-          projectId={project.id}
-          projectDomain={project.domain}
-          environments={envs}
-        />
+        <LivePreviewPanel projectId={project.id} environments={envs} />
       </div>
     </div>
   );
