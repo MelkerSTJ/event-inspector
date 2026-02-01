@@ -3,11 +3,12 @@ import { getProjectById } from "app/lib/projects/mock";
 import { LivePreviewPanel } from "app/components/live/live-preview-panel";
 
 type Props = {
-  params: { projectId: string };
+  params: Promise<{ projectId: string }>;
 };
 
-export default function ProjectLivePage({ params }: Props) {
-  const projectId = params.projectId;
+export default async function ProjectLivePage({ params }: Props) {
+  const { projectId } = await params;
+
   const project = getProjectById(projectId);
 
   if (!project) {
@@ -37,7 +38,8 @@ export default function ProjectLivePage({ params }: Props) {
         <div>
           <h2 className="text-2xl font-semibold">Live</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Project: <span className="font-mono">{project.id}</span> • {project.domain}
+            Project: <span className="font-mono">{project.id}</span> •{" "}
+            {project.domain}
           </p>
         </div>
 
