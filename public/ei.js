@@ -1,16 +1,35 @@
 /**
  * Event Inspector Tracking Script (ei.js)
- * Loads via GTM or direct script tag
- * Sends events to Event Inspector backend
+ * v2.0 - Fixed initialization order
  */
 (function () {
   'use strict';
 
-  // === Configuration ===
+  // === STEG 1: Skapa en event-kö DIREKT ===
+  // Detta garanterar att window._ei_track alltid existerar,
+  // även om config inte är satt än
+  var eventQueue = [];
+  var isInitialized = false;
+
+  // Stub-funktion som köar events
+  window._ei_track = function(eventName, eventParams) {
+    if (isInitialized) {
+      // Om initierad, skicka direkt
+      sendEvent(eventName, eventParams);
+    } else {
+      // Annars, lägg i kö
+      eventQueue.push({ name: eventName, params: eventParams });
+      console.log('[EI.js] Queued event (waiting for init):', eventName);
+    }
+  };
+
+  console.log('[EI.js] window._ei_track stub created');
+
+  // === STEG 2: Läs config ===
   var writeKey = window.__EI_WRITE_KEY__;
   var endpoint = window.__EI_ENDPOINT__ || 'https://event-inspector-pi.vercel.app/api/ingest';
 
-  // === Debug logging ===
+  // === Hjälpfunktioner ===
   function log(level, message, data) {
     var prefix = '[EI.js]';
     if (level === 'error') {
@@ -22,34 +41,36 @@
     }
   }
 
-  // === Validate configuration ===
+  function getSessionId() {
+    var params = new URLSearchParams(window.location.search);
+    return params.get('ei_session') || null;
+  }
+
+  function generateEventId() {
+    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  }
+
+  // === STEG 3: Validera config ===
   if (!writeKey) {
     log('error', 'Missing writeKey! Set window.__EI_WRITE_KEY__ before loading ei.js');
-    log('error', 'Current values:', {
-      writeKey: writeKey,
-      endpoint: endpoint
-    });
+    log('error', 'Events will be queued but NOT sent until writeKey is set.');
+    // NOTERA: Vi gör INTE return här längre!
+    // window._ei_track finns redan och köar events
     return;
   }
 
   log('info', 'Initialized with writeKey:', writeKey.substring(0, 8) + '...');
   log('info', 'Endpoint:', endpoint);
 
-  // === Get session ID from URL ===
-  function getSessionId() {
-    var params = new URLSearchParams(window.location.search);
-    return params.get('ei_session') || null;
-  }
-
-  // === Generate event ID ===
-  function generateEventId() {
-    return 'evt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-  }
-
-  // === Track function ===
-  function track(eventName, eventParams) {
+  // === STEG 4: Faktisk send-funktion ===
+  function sendEvent(eventName, eventParams) {
     var sessionId = getSessionId();
-    
+
+    if (!sessionId) {
+      log('warn', 'No ei_session in URL, skipping event:', eventName);
+      return;
+    }
+
     var payload = {
       writeKey: writeKey,
       name: eventName,
@@ -68,13 +89,11 @@
       })
     };
 
-    log('info', 'Tracking event:', eventName, payload);
+    log('info', 'Sending event:', eventName);
 
     fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       mode: 'cors'
     })
@@ -82,9 +101,6 @@
         if (!response.ok) {
           return response.text().then(function (text) {
             log('error', 'Ingest failed (' + response.status + '):', text);
-            if (response.status === 401) {
-              log('error', 'WriteKey validation failed. Check that writeKey matches your project configuration.');
-            }
           });
         } else {
           log('info', 'Event sent successfully:', eventName);
@@ -95,20 +111,31 @@
       });
   }
 
-  // === Expose global track function ===
-  window._ei_track = track;
-  log('info', 'window._ei_track is now available');
+  // === STEG 5: Markera som initierad och töm kön ===
+  isInitialized = true;
+  
+  // Ersätt stub med riktig funktion
+  window._ei_track = function(eventName, eventParams) {
+    sendEvent(eventName, eventParams);
+  };
 
-  // === Auto-track page views ===
+  // Skicka köade events
+  log('info', 'Processing queued events:', eventQueue.length);
+  eventQueue.forEach(function(item) {
+    sendEvent(item.name, item.params);
+  });
+  eventQueue = [];
+
+  // === STEG 6: Auto-track page views ===
   function trackPageView() {
-    track('page_view', {
+    window._ei_track('page_view', {
       path: window.location.pathname,
       search: window.location.search,
       hash: window.location.hash
     });
   }
 
-  // === SPA route change detection ===
+  // SPA-stöd
   var lastUrl = window.location.href;
 
   function checkUrlChange() {
@@ -119,12 +146,10 @@
     }
   }
 
-  // Listen for popstate (back/forward navigation)
   window.addEventListener('popstate', function () {
     setTimeout(checkUrlChange, 0);
   });
 
-  // Intercept pushState and replaceState
   var originalPushState = history.pushState;
   var originalReplaceState = history.replaceState;
 
@@ -138,10 +163,9 @@
     setTimeout(checkUrlChange, 0);
   };
 
-  // Fallback: poll for URL changes (some SPAs use hash routing)
   setInterval(checkUrlChange, 1000);
 
-  // === Initial page view ===
+  // Initial page view
   if (document.readyState === 'complete') {
     trackPageView();
   } else {
@@ -150,4 +174,3 @@
 
   log('info', 'Event Inspector tracking active');
 })();
-
